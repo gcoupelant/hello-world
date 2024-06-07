@@ -1,0 +1,67 @@
+name: Build Python app
+
+on:
+  - push
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    environment: dev
+    permissions:
+      contents: read
+      security-events: write
+    env:
+      PIPENV_VENV_IN_PROJECT: "true"  # Create the `.venv` directory in the project directory, so its path is well known
+      PIPENV_VIRTUALENV_COPIES: "true"  # Prevent pipenv from using symlink when creating the virtual env, see https://pipenv.pypa.io/en/latest/configuration.html#pipenv.environments.Setting.PIPENV_VIRTUALENV_COPIES
+
+    steps:
+      # Setup
+      - uses: actions/checkout@v4
+      - name: Set up Snyk CLI to check for security issues
+        uses: snyk/actions/setup@master
+      - name: Setup Python # Set Python version
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"  # Same as Pipfile and Dockerfiles
+
+      # Install pipenv
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip pipenv
+          pipenv install --deploy
+
+      - name: Run the program
+        run: pipenv run python main.py
+
+      - name: Upload python dependencies
+        uses: actions/upload-artifact@v4
+        with:
+          name: virtual-env
+          path: .venv
+
+      # Docker
+      - name: Build Docker image
+        run: docker build -t gcoupelant/python-hello-world .  # Build the image using the venv created by the CI
+
+      - name: Scan Docker image
+        uses: snyk/actions/docker@master
+        continue-on-error: true
+        with:
+          image: gcoupelant/python-hello-world
+          args: --file=Dockerfile
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      # Replace any "null" security severity values with 0. The null value is used in the case
+      # of license-related findings, which do not do not indicate a security vulnerability.
+      # See https://github.com/github/codeql-action/issues/2187 for more context.
+      - name: Post process snyk sarif file
+        run: |
+          sed -i 's/"security-severity": "null"/"security-severity": "0"/g' snyk.sarif
+
+      - name: Upload Snyk report as sarif
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: snyk.sarif
+
+      - name: Run the program from the Docker image
+        run: docker run gcoupelant/python-hello-world
