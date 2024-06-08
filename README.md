@@ -12,4 +12,4 @@ To ensure the `.venv` directory is created in the project directory, ensure you 
 
 The configured GitHub Actions will build the dependencies in a Ubuntu runner, run the program using `pipenv run` and upload the virtual environment artifacts.
 
-After these steps, it will also build a Docker image using `Dockerfile.external-venv` by providing the previously built virtual environment and run the program using a container this time.
+After these steps, it will also build a Docker image by providing the previously built virtual environment and run the program using a container this time.
